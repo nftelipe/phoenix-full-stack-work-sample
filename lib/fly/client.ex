@@ -176,16 +176,26 @@ defmodule Fly.Client do
 
   def fetch_app(name, config) do
     """
-      query($name: String!) {
+      query($name: String!, $show_completed: Boolean!) {
         app(name: $name) {
           id
           name
+          deployed
+          status
           organization {
             id
             slug
           }
-          deployed
-          status
+          deploymentStatus {
+            id
+            status
+            version
+            description
+            placedCount
+            desiredCount
+            healthyCount
+            unhealthyCount
+          }
           processGroups {
             name
             regions
@@ -210,10 +220,25 @@ defmodule Fly.Client do
               }
             }
           }
+          allocations(showCompleted: $show_completed) {
+            idShort
+            version
+            latestVersion
+            status
+            desiredStatus
+            totalCheckCount
+            passingCheckCount
+            warningCheckCount
+            criticalCheckCount
+            createdAt
+            region
+            restarts
+            taskName
+          }
         }
       }
     """
-    |> perform_query(%{name: name}, config, :fetch_app)
+    |> perform_query(%{name: name, show_completed: false}, config, :fetch_app)
     |> handle_response()
     |> case do
       {:ok, %{"app" => app}} ->
