@@ -5,6 +5,8 @@ defmodule FlyWeb.AppLive.Show do
   alias Fly.Client
   alias FlyWeb.Components.HeaderBreadcrumbs
 
+  @app_refresh_rate 5_000
+
   @impl true
   def mount(%{"name" => name}, session, socket) do
     socket =
@@ -19,7 +21,9 @@ defmodule FlyWeb.AppLive.Show do
 
     # Only make the API call if the websocket is setup. Not on initial render.
     if connected?(socket) do
-      {:ok, fetch_app(socket)}
+      send(self(), :refresh_app)
+
+      {:ok, socket}
     else
       {:ok, socket}
     end
@@ -49,6 +53,36 @@ defmodule FlyWeb.AppLive.Show do
   @impl true
   def handle_event("click", _params, socket) do
     {:noreply, assign(socket, count: socket.assigns.count + 1)}
+  end
+
+  @impl true
+  def handle_info(:refresh_app, socket) do
+    socket = fetch_app(socket)
+
+    Process.send_after(self(), :refresh_app, @app_refresh_rate)
+
+    {:noreply, socket}
+  end
+
+  def allocation_health_description(instance) do
+    checks = [
+      {instance["totalCheckCount"], "total"},
+      {instance["passingCheckCount"], "passing"},
+      {instance["warningCheckCount"], "warning"},
+      {instance["criticalCheckCount"], "critical"}
+    ]
+
+    checks
+    |> Enum.reject(fn {count, _} -> count == 0 end)
+    |> Enum.map(fn {count, type} -> "#{count} #{type}" end)
+    |> Enum.join(", ")
+  end
+
+  def deployment_instances_description(%{"deploymentStatus" => deployment_status}) do
+    "#{deployment_status["desiredCount"]} desired,\
+    #{deployment_status["placedCount"]} placed,\
+    #{deployment_status["healthyCount"]} healthy,\
+    #{deployment_status["unhealthyCount"]} unhealthy"
   end
 
   def status_bg_color(app) do
